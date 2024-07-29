@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0", "pandas", "nvitop"]
+requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "mtnlog"
-version = "1.0.1"
+version = "1.0.2"
 authors = [
     { name = "Wongkraiwich Chuenchomphu", email = "wongkraiwich@inedible.dev" },
 ]
@@ -16,6 +16,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+dependencies = ["nvitop", "pandas"]
 
 [project.urls]
 Homepage = "https://github.com/kentakoong/mtnlog"
