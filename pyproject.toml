@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0", "pandas", "nvitop"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "mtnlog"
-version = "1.0.0"
+version = "1.0.1"
 authors = [
     { name = "Wongkraiwich Chuenchomphu", email = "wongkraiwich@inedible.dev" },
 ]
