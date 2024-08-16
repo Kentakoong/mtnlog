@@ -1,117 +1,158 @@
-import os
-import psutil
-import pandas as pd
+"""Performance logger module."""
+
 import csv
 import logging
-from nvitop import ResourceMetricCollector, Device
+import os
 import time
+from multiprocessing import Process, Queue, Event
+from queue import Empty
+from typing import Union, Dict, cast
+
+import pandas as pd
+import psutil
+from nvitop import Device, ResourceMetricCollector
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class PerformanceLogger:
-    """Performance logger class."""
+    """Performance logger class using multiprocessing."""
 
-    def __init__(self, log_dir, log_node):
+    def __init__(self, log_dir, log_node, interval=1.0):
         os.makedirs(log_dir, exist_ok=True)
+
+        self.filepath = f"{log_dir}/node-{log_node}.csv"
         self.log_dir = log_dir
         self.log_node = log_node
-        self.df = pd.DataFrame()
-        self.tag = None
-        self.filepath = None
-        self.writer = None
-        self.file = None
-        self.first_collect = True
-        self.collector = ResourceMetricCollector(Device.cuda.all()).daemonize(
-            on_collect=self.on_collect,
-            interval=1.0,
-        )
+        self.interval = interval
         self.cpu_count = psutil.cpu_count(logical=False)
-        self.start_time = None
+        self.stop_event = Event()
+        self.metrics_queue = Queue()
+        self.tag_queue = Queue()  # New queue for tag changes
 
-    def new_res(self):
-        """Creates a new resource file directory and sets the file path."""
-        os.makedirs(self.log_dir, exist_ok=True)
-        self.filepath = f"{self.log_dir}/node-{self.log_node}.csv"
-
-        # Open the file and set up the CSV writer
-        file_exists = os.path.exists(self.filepath)
-        self.file = open(self.filepath, 'a', newline='', encoding='utf-8')
-        if file_exists:
-            self.writer = csv.DictWriter(self.file, fieldnames=self.df.columns)
-        else:
-            self.writer = None
-        logging.info("New resource file created: %s", self.filepath)
-
-    def change_tag(self, tag):
-        """Changes the tag and restarts the collector if necessary."""
-        if self.filepath is not None:
-            self.stop()
-        self.tag = tag
-        self.new_res()
+        # Start custom processes for collecting and writing metrics
+        self.collector_process = Process(target=self._run_collector, args=(
+            self.stop_event, self.metrics_queue, self.tag_queue, self.interval))
+        self.writer_process = Process(target=self._run_writer,
+                                      args=(self.stop_event, self.metrics_queue, self.filepath))
+        self.collector_process.start()
+        self.writer_process.start()
 
     def stop(self):
-        """Stops the collector and saves the collected data to a CSV file."""
-        if self.file:
-            self.file.close()
-        self.df = pd.DataFrame()
+        """Stop the processes."""
+        self.stop_event.set()
+        self.collector_process.join()
+        self.writer_process.join()
 
-    def get_cpu_usage_per_core(self):
+    def change_tag(self, tag: str):
+        """Changes the tag of the logger."""
+        self.tag_queue.put(tag)
+        logging.info("Tag change request sent: %s", tag)
+
+    def _run_collector(self, stop_event, metrics_queue, tag_queue, interval):
+        """Process for collecting metrics."""
+        collector = ResourceMetricCollector(Device.cuda.all())
+        collector.start(tag="metrics-daemon")
+        current_tag = None
+
+        while not stop_event.is_set():
+            # Check for tag updates
+            try:
+                while True:  # Process all pending tag updates
+                    current_tag = tag_queue.get_nowait()
+            except Empty:
+                pass
+
+            metrics = self._collect_metrics(collector, current_tag)
+            metrics_queue.put(metrics)
+            time.sleep(interval)
+
+        collector.stop()
+
+    def _run_writer(self, stop_event, metrics_queue, filepath: str):
+        """Process for writing metrics."""
+        first_collect = True
+        while not stop_event.is_set():
+            try:
+                metrics = metrics_queue.get(timeout=1)
+                self._write_metrics(metrics, filepath, first_collect)
+                if first_collect:
+                    first_collect = False
+            except Empty:
+                continue
+
+    def _get_cpu_usage_per_core(self):
         """Returns the CPU usage per core."""
         cpu_percent = psutil.cpu_percent(interval=0.1, percpu=True)
-        return {f"cpu_core_{i+1} (%)": percent for i, percent in enumerate(cpu_percent[:self.cpu_count])}
+        return {f"cpu_core_{i+1} (%)": percent
+                for i, percent in enumerate(cpu_percent)}
 
-    def clean_column_name(self, col):
+    def _get_network_bandwidth(self):
+        """Returns the network bandwidth."""
+        interfaces = psutil.net_io_counters(pernic=True)
+        it = {}
+        for interface, stats in interfaces.items():
+            bytes_sent = stats.bytes_sent
+            bytes_recv = stats.bytes_recv
+            mbps_sent = bytes_sent * 8 / (1024 * 1024)
+            mbps_recv = bytes_recv * 8 / (1024 * 1024)
+            it[f"network_{interface}/sent (Mbps)"] = mbps_sent
+            it[f"network_{interface}/recv (Mbps)"] = mbps_recv
+        return it
+
+    def _clean_column_name(self, col: str):
         """Cleans the column name."""
-        if col.startswith("metrics-daemon/host/"):
-            col = col[len("metrics-daemon/host/"):]
+        rm_prefix = ["metrics-daemon/host/", "metrics-daemon/"]
+        for prefix in rm_prefix:
+            if col.startswith(prefix):
+                col = col[len(prefix):]
         return col
 
-    def on_collect(self, metrics):
+    def _collect_metrics(self, collector: ResourceMetricCollector, current_tag: str):
         """Collects and processes metrics."""
-        metrics['tag'] = self.tag
-        cpu_metrics = self.get_cpu_usage_per_core()
+        # Collect the metrics and cast it to the appropriate type
+        raw_metrics = collector.collect()
+        metrics = cast(Dict[str, Union[float, str, None]], raw_metrics)
+
+        # Collect CPU and network metrics
+        cpu_metrics = self._get_cpu_usage_per_core()
         metrics.update(cpu_metrics)
+
+        network_metrics = self._get_network_bandwidth()
+        metrics.update(network_metrics)
+
+        metrics['tag'] = current_tag
+
+        return metrics
+
+    def _write_metrics(self, metrics: dict, filepath: str, first_collect: bool):
+        """Writes metrics to file if the row is not empty."""
         df_metrics = pd.DataFrame.from_records([metrics])
-        df_metrics.columns = [self.clean_column_name(col) for col in df_metrics.columns]
+        df_metrics.columns = [self._clean_column_name(col)
+                              for col in df_metrics.columns]
 
-        if self.df.empty:
-            self.df = df_metrics
-        else:
-            self.df = self.df.reindex(columns=list(self.df.columns) +
-                                      [col for col in df_metrics.columns if col not in self.df.columns])
-            df_metrics = df_metrics.reindex(columns=self.df.columns, fill_value=None)
-            self.df = pd.concat([self.df, df_metrics], ignore_index=True)
+        try:
+            if first_collect and not os.path.isfile(filepath):
+                df_metrics.to_csv(filepath, index=False)
+                logging.info("First collection completed at path %s", filepath)
+            else:
+                if df_metrics.isnull().all().all():
+                    logging.info("Skipping empty row")
+                    return
 
-        self._write_to_file(df_metrics)
+                file_exists = os.path.isfile(filepath)
+                with open(filepath, 'a', newline='', encoding='utf-8') as f:
+                    writer = csv.DictWriter(f, fieldnames=df_metrics.columns)
 
-        return True
+                    # Write the header only if the file does not exist or the header is missing
+                    if not file_exists or f.tell() == 0:
+                        writer.writeheader()
 
-    def _write_to_file(self, row):
-        """Writes a row of data to the file."""
-        row_dict = row.to_dict(orient='records')[0]  # Convert DataFrame row to dictionary
-        if self.first_collect:
-            with open(self.filepath, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=row.columns)
-                writer.writeheader()
-                writer.writerow(row_dict)
-            self.first_collect = False
-            logging.info("First collection completed with header: %s", self.filepath)
-        else:
-            with open(self.filepath, 'a', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=self.df.columns)
-                writer.writerow(row_dict)
-                f.flush()
-            # logging.info(f"Appended row to file: {self.filepath}")
-
-    def start(self):
-        """Starts the performance logger."""
-        self.start_time = time.time()
-
-    def cleanup(self):
-        """Stops the collector and ensures all data is saved."""
-        self.stop()
-
-    def __del__(self):
-        """Destructor to ensure cleanup is called."""
-        self.cleanup()
+                    writer.writerow(df_metrics.iloc[0].to_dict())
+                    logging.info("Data written to %s with duration %s",
+                                 filepath, df_metrics.iloc[0].get('duration (s)', 'N/A'))
+                    f.flush()
+        except (IOError, OSError) as e:
+            logging.error("File I/O error writing to %s: %s", filepath, str(e))
+        except ValueError as e:
+            logging.error("Value error during file write: %s", str(e))
