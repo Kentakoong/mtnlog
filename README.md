@@ -14,7 +14,7 @@ pip install mtnlog
 
 ## Usage
 
-To use mtnlog, you have two features: `JSONLogger` and `PerformanceLogger`.
+To use mtnlog, you have two features: `JSONLogger` and `PerformanceLogger` and `PerformancePlotter`.
 
 ### JSONLogger
 
@@ -62,12 +62,34 @@ To stop logging, you can use the `stop` method:
 collector.stop()
 ```
 
+### PerformancePlotter
+
+The `PerformancePlotter` class is a plotter for system performance data. It plots the time taken to execute the block, as well as the CPU, memory, GPU, and network usage. You can create a new `PerformancePlotter` instance by passing a file path to the constructor:
+
+```python
+from mtnlog import PerformancePlotter
+
+plotter = PerformancePlotter(base_dir="<your_base_dir>", log_node="<current_node>")
+
+```
+
+`your_base_dir` is the base directory where the log file will be saved.
+`current_node` is the number of the node you are logging.
+
+You can then use the `plot` method to plot the data:
+
+```python
+
+plotter.plot()
+
+```
+
 ## Example
 
 Here is an example of how to use mtnlog:
 
 ```python
-from mtnlog import JSONLogger, PerformanceLogger
+from mtnlog import JSONLogger, PerformanceLogger, PerformancePlotter
 
 # Create a JSONLogger instance
 
@@ -88,5 +110,13 @@ collector.change_tag('new_tag')
 # Stop logging
 
 collector.stop()
+
+# Create a PerformancePlotter instance
+
+plotter = PerformancePlotter(base_dir='logs', log_node="0")
+
+# Plot the data
+
+plotter.plot()
 
 ```
