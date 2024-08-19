@@ -18,12 +18,13 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 class PerformanceLogger:
     """Performance logger class using multiprocessing."""
 
-    def __init__(self, log_dir, log_node, interval=1.0):
+    def __init__(self, log_dir, log_node, interval=1.0, debug_mode=False):
         os.makedirs(log_dir, exist_ok=True)
 
         self.filepath = f"{log_dir}/node-{log_node}.csv"
         self.log_dir = log_dir
         self.log_node = log_node
+        self.debug_mode = debug_mode
         self.interval = interval
         self.cpu_count = psutil.cpu_count(logical=False)
         self.stop_event = Event()
@@ -43,6 +44,8 @@ class PerformanceLogger:
         self.stop_event.set()
         self.collector_process.join()
         self.writer_process.join()
+        self.metrics_queue.close()
+        self.tag_queue.close()
 
     def change_tag(self, tag: str):
         """Changes the tag of the logger."""
@@ -108,7 +111,7 @@ class PerformanceLogger:
                 col = col[len(prefix):]
         return col
 
-    def _collect_metrics(self, collector: ResourceMetricCollector, current_tag: str):
+    def _collect_metrics(self, collector: ResourceMetricCollector, current_tag: str | None):
         """Collects and processes metrics."""
         # Collect the metrics and cast it to the appropriate type
         raw_metrics = collector.collect()
@@ -149,8 +152,10 @@ class PerformanceLogger:
                         writer.writeheader()
 
                     writer.writerow(df_metrics.iloc[0].to_dict())
-                    logging.info("Data written to %s with duration %s",
-                                 filepath, df_metrics.iloc[0].get('duration (s)', 'N/A'))
+
+                    if self.debug_mode:
+                        logging.info("Data written to %s with duration %s",
+                                    filepath, df_metrics.iloc[0].get('duration (s)', 'N/A'))
                     f.flush()
         except (IOError, OSError) as e:
             logging.error("File I/O error writing to %s: %s", filepath, str(e))
