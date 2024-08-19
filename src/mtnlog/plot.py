@@ -1,5 +1,3 @@
-"""Performance plotter module."""
-
 import logging
 import os
 import re
@@ -72,8 +70,11 @@ class PerformancePlotter:
             if 'memory_used (MiB)' in col:
                 gpu_memory_col = col.replace('memory_used (MiB)', 'memory_total (MiB)')
                 if gpu_memory_col in df.columns:
+                    # Ensure the column contains numeric data
+                    df[gpu_memory_col] = pd.to_numeric(df[gpu_memory_col], errors='coerce')
                     max_y = df[gpu_memory_col].mean()
-                    ax.axhline(y=max_y, color='r', linestyle='--', label="Max Memory")
+                    if not pd.isna(max_y):
+                        ax.axhline(y=max_y, color='r', linestyle='--', label="Max Memory")
 
             ax.legend(title='Tag')
 
@@ -86,6 +87,7 @@ class PerformancePlotter:
 
             plt.savefig(f"{node_plot_dir}/{name}.jpg", format='jpeg', dpi=100)
             plt.close()
+
 
     def plot(self):
         """Plots the performance metrics."""

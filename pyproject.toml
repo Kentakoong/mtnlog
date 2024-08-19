@@ -4,10 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mtnlog"
-version = "1.1.0"
+version = "1.2.0"
 authors = [
     { name = "Wongkraiwich Chuenchomphu", email = "wongkraiwich@inedible.dev" },
+    { name = "Atikan Payungthong", email = "atikan9728@gmail.com" },
 ]
+
 description = "A simple performance logger for Python"
 readme = "README.md"
 requires-python = ">=3.8"
