@@ -47,27 +47,6 @@ class PerformancePlotter:
 
         return {tag: colors[i] for i, tag in enumerate(tags)}
 
-    def preprocess_data(self, df):
-        """Preprocesses the data, parsing floats and dates, and handling categorical units."""
-        
-        # Parse columns that should be floats
-        for col in df.columns:
-            if df[col].dtype == object:
-                try:
-                    df[col] = pd.to_numeric(df[col], errors='coerce')
-                except ValueError:
-                    pass
-
-        # Parse columns that should be dates
-        if 'duration (s)' in df.columns:
-            df['duration (s)'] = pd.to_datetime(df['duration (s)'], errors='coerce')
-
-        # Ensure categorical columns are properly typed
-        if 'tag' in df.columns:
-            df['tag'] = df['tag'].astype('category')
-
-        return df
-
     def graph(self, df, node_plot_dir):
         """Graphs the performance metrics."""
 
@@ -91,8 +70,11 @@ class PerformancePlotter:
             if 'memory_used (MiB)' in col:
                 gpu_memory_col = col.replace('memory_used (MiB)', 'memory_total (MiB)')
                 if gpu_memory_col in df.columns:
+                    # Ensure the column contains numeric data
+                    df[gpu_memory_col] = pd.to_numeric(df[gpu_memory_col], errors='coerce')
                     max_y = df[gpu_memory_col].mean()
-                    ax.axhline(y=max_y, color='r', linestyle='--', label="Max Memory")
+                    if not pd.isna(max_y):
+                        ax.axhline(y=max_y, color='r', linestyle='--', label="Max Memory")
 
             ax.legend(title='Tag')
 
@@ -106,6 +88,7 @@ class PerformancePlotter:
             plt.savefig(f"{node_plot_dir}/{name}.jpg", format='jpeg', dpi=100)
             plt.close()
 
+
     def plot(self):
         """Plots the performance metrics."""
 
@@ -117,7 +100,6 @@ class PerformancePlotter:
             if df.empty:
                 logging.warning("File %s is empty, skipping.", filepath)
 
-            df = self.preprocess_data(df)
             df.sort_values(by=['duration (s)'], inplace=True)
 
             df = df[df['tag'].notna()]
