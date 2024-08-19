@@ -88,7 +88,6 @@ class PerformancePlotter:
             plt.savefig(f"{node_plot_dir}/{name}.jpg", format='jpeg', dpi=100)
             plt.close()
 
-
     def plot(self):
         """Plots the performance metrics."""
 
