@@ -1,12 +1,10 @@
-"""Performance logger module."""
-
 import csv
 import logging
 import os
 import time
 from multiprocessing import Process, Queue, Event
 from queue import Empty
-from typing import Union, Dict, cast
+from typing import Union, Dict, Optional, cast
 
 import pandas as pd
 import psutil
@@ -14,11 +12,10 @@ from nvitop import Device, ResourceMetricCollector
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-
 class PerformanceLogger:
     """Performance logger class using multiprocessing."""
 
-    def __init__(self, log_dir, log_node, interval=1.0, debug_mode=False):
+    def __init__(self, log_dir: str, log_node: str, interval: float = 1.0, debug_mode: bool = False):
         os.makedirs(log_dir, exist_ok=True)
 
         self.filepath = f"{log_dir}/node-{log_node}.csv"
@@ -39,7 +36,7 @@ class PerformanceLogger:
         self.collector_process.start()
         self.writer_process.start()
 
-    def stop(self):
+    def stop(self) -> None:
         """Stop the processes."""
         self.stop_event.set()
         self.collector_process.join()
@@ -47,16 +44,16 @@ class PerformanceLogger:
         self.metrics_queue.close()
         self.tag_queue.close()
 
-    def change_tag(self, tag: str):
+    def change_tag(self, tag: str) -> None:
         """Changes the tag of the logger."""
         self.tag_queue.put(tag)
         logging.info("Tag change request sent: %s", tag)
 
-    def _run_collector(self, stop_event, metrics_queue, tag_queue, interval):
+    def _run_collector(self, stop_event: Event, metrics_queue: Queue, tag_queue: Queue, interval: float) -> None:
         """Process for collecting metrics."""
         collector = ResourceMetricCollector(Device.cuda.all())
         collector.start(tag="metrics-daemon")
-        current_tag = None
+        current_tag: Optional[str] = None
 
         while not stop_event.is_set():
             # Check for tag updates
@@ -72,7 +69,7 @@ class PerformanceLogger:
 
         collector.stop()
 
-    def _run_writer(self, stop_event, metrics_queue, filepath: str):
+    def _run_writer(self, stop_event: Event, metrics_queue: Queue, filepath: str) -> None:
         """Process for writing metrics."""
         first_collect = True
         while not stop_event.is_set():
@@ -84,13 +81,13 @@ class PerformanceLogger:
             except Empty:
                 continue
 
-    def _get_cpu_usage_per_core(self):
+    def _get_cpu_usage_per_core(self) -> Dict[str, float]:
         """Returns the CPU usage per core."""
         cpu_percent = psutil.cpu_percent(interval=0.1, percpu=True)
         return {f"cpu_core_{i+1} (%)": percent
                 for i, percent in enumerate(cpu_percent)}
 
-    def _get_network_bandwidth(self):
+    def _get_network_bandwidth(self) -> Dict[str, float]:
         """Returns the network bandwidth."""
         interfaces = psutil.net_io_counters(pernic=True)
         it = {}
@@ -103,7 +100,7 @@ class PerformanceLogger:
             it[f"network_{interface}/recv (Mbps)"] = mbps_recv
         return it
 
-    def _clean_column_name(self, col: str):
+    def _clean_column_name(self, col: str) -> str:
         """Cleans the column name."""
         rm_prefix = ["metrics-daemon/host/", "metrics-daemon/"]
         for prefix in rm_prefix:
@@ -111,7 +108,7 @@ class PerformanceLogger:
                 col = col[len(prefix):]
         return col
 
-    def _collect_metrics(self, collector: ResourceMetricCollector, current_tag: str | None):
+    def _collect_metrics(self, collector: ResourceMetricCollector, current_tag: Optional[str]) -> Dict[str, Union[float, str, None]]:
         """Collects and processes metrics."""
         # Collect the metrics and cast it to the appropriate type
         raw_metrics = collector.collect()
@@ -128,7 +125,7 @@ class PerformanceLogger:
 
         return metrics
 
-    def _write_metrics(self, metrics: dict, filepath: str, first_collect: bool):
+    def _write_metrics(self, metrics: Dict[str, Union[float, str, None]], filepath: str, first_collect: bool) -> None:
         """Writes metrics to file if the row is not empty."""
         df_metrics = pd.DataFrame.from_records([metrics])
         df_metrics.columns = [self._clean_column_name(col)
