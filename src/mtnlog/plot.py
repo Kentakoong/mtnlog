@@ -26,7 +26,6 @@ plot_col: List[str] = [
     for direction in ['sent', 'recv']
 ]
 
-# Define constant colors for specific tags
 tag_colors_map: Dict[str, str] = {
     'load_model': 'blue',
     'load_token': 'green',
@@ -36,41 +35,29 @@ tag_colors_map: Dict[str, str] = {
     'save_model': 'brown'
 }
 
-# Define line styles for each GPU
 line_styles: List[str] = ['-', '--', '-.', ':']
 
-# Define a fallback colormap for any tags not explicitly listed
-fallback_colors = plt.get_cmap("Paired").colors  # type: ignore
+fallback_colors = plt.get_cmap("Paired").colors
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class PerformancePlotter:
-    """Performance plotter class."""
-
     def __init__(self, base_dir: str, log_node: str):
         self.log_node: str = log_node
         self.metric_dir: str = f"{base_dir}/metric"
         self.graph_dir: str = f"{base_dir}/graph"
-
         os.makedirs(self.graph_dir, exist_ok=True)
 
     def get_tag_colors(self, df: pd.DataFrame) -> Dict[str, str]:
-        """Returns the tag colors."""
-
         tags = df['tag'].unique()
-
-        # Use the predefined tag colors, and assign remaining tags to fallback colors
         return {
             tag: tag_colors_map.get(tag, fallback_colors[i % len(fallback_colors)])
             for i, tag in enumerate(tags)
         }
 
     def graph(self, df: pd.DataFrame, node_plot_dir: str) -> None:
-        """Graphs the performance metrics."""
-
         os.makedirs(node_plot_dir, exist_ok=True)
-
         tag_colors = self.get_tag_colors(df)
 
         for col in tqdm(plot_col, desc=f"Plotting metrics for node-{self.log_node}: "):
@@ -79,60 +66,52 @@ class PerformancePlotter:
                 continue
 
             _, ax = plt.subplots(figsize=(10, 6))
+            segment = None  # Define segment outside the loop to avoid undefined variable
 
             for tag, segment in df.groupby('tag'):
-                # Drop rows where 'duration (s)' is NaN
-                segment = segment.dropna(subset=['duration (s)'])
-
-                # Convert 'duration (s)' and 'segment[col]' to numeric if possible
+                # Ensure 'duration (s)' and 'segment[col]' are numeric
                 segment['duration (s)'] = pd.to_numeric(segment['duration (s)'], errors='coerce')
                 segment[col] = pd.to_numeric(segment[col], errors='coerce')
 
-                # Drop any rows where either 'duration (s)' or 'segment[col]' has NaN values
+                # Drop rows with NaN values
                 segment = segment.dropna(subset=['duration (s)', col])
 
-                # Ensure there is data left to plot after handling NaNs
                 if not segment.empty:
                     ax.plot(segment['duration (s)'], segment[col], label=tag, color=tag_colors[tag])
 
-            if 'memory_used (MiB)' in col:
-                gpu_memory_col = col.replace('memory_used (MiB)', 'memory_total (MiB)')
-                if gpu_memory_col in df.columns:
-                    # Ensure the column contains numeric data
-                    df[gpu_memory_col] = pd.to_numeric(df[gpu_memory_col], errors='coerce')
-                    max_y = df[gpu_memory_col].mean()
-                    if not pd.isna(max_y):
-                        ax.axhline(y=max_y, color='red', linestyle='-', label="Max Memory")
+            if segment is not None and not segment.empty:
+                if 'memory_used (MiB)' in col:
+                    gpu_memory_col = col.replace('memory_used (MiB)', 'memory_total (MiB)')
+                    if gpu_memory_col in df.columns:
+                        df[gpu_memory_col] = pd.to_numeric(df[gpu_memory_col], errors='coerce')
+                        max_y = df[gpu_memory_col].mean()
+                        if not pd.isna(max_y):
+                            ax.axhline(y=max_y, color='red', linestyle='-', label="Max Memory")
 
-            ax.legend(title='Tag')
+                ax.legend(title='Tag')
+                name = re.sub(r"[ /]", "_", col)
+                name = re.sub(r"_mean", "", name)
+                name = re.sub(r"\(gpu:\d+\)", "", name)
 
-            name = re.sub(r"[ /]", "_", col)
-            name = re.sub(r"_mean", "", name)
-            name = re.sub(r"\(gpu:\d+\)", "", name)
+                ax.set_xlabel('Duration (s)')
+                ax.set_ylabel(name)
 
-            ax.set_xlabel('Duration (s)')
-            ax.set_ylabel(name)
+                if 'cuda:' in col:
+                    gpu_num = re.search(r'cuda:(\d+)', col).group(1)
+                    last_point = segment['duration (s)'].iloc[-1]
+                    last_value = segment[col].iloc[-1]
+                    ax.text(last_point, last_value, f'GPU {gpu_num}', fontsize=9,
+                            color=tag_colors[df['tag'].iloc[-1]],
+                            ha='left', va='bottom', rotation=45)
 
-            # Add GPU label only at the end of the line
-            if 'cuda:' in col:
-                gpu_num = re.search(r'cuda:(\d+)', col).group(1)
-                last_point = segment['duration (s)'].iloc[-1]
-                last_value = segment[col].iloc[-1]
-                ax.text(last_point, last_value, f'GPU {gpu_num}', fontsize=9,
-                        color=tag_colors[df['tag'].iloc[-1]],
-                        ha='left', va='bottom', rotation=45)
-
-            plt.tight_layout()
-            plt.savefig(f"{node_plot_dir}/{name}.jpg", format='jpeg', dpi=100, bbox_inches='tight')
-            plt.close()
+                plt.tight_layout()
+                plt.savefig(f"{node_plot_dir}/{name}.jpg", format='jpeg', dpi=100, bbox_inches='tight')
+                plt.close()
 
     def plot_cuda_memory(self, df: pd.DataFrame, node_plot_dir: str) -> None:
-        """Plots memory used by each CUDA device with different line styles and individual max memory lines."""
-
-        _, ax = plt.subplots(figsize=(14, 8))  # Increase figure size for better readability
+        _, ax = plt.subplots(figsize=(14, 8))
         tag_colors = self.get_tag_colors(df)
 
-        # Plot the actual memory usage lines
         for i, cuda_device in enumerate(cuda_devices):
             col = f'cuda:{cuda_device} (gpu:{cuda_device})/memory_used (MiB)/mean'
             max_col = f'cuda:{cuda_device} (gpu:{cuda_device})/memory_total (MiB)/mean'
@@ -141,17 +120,15 @@ class PerformancePlotter:
                 for tag in df['tag'].unique():
                     segment = df[df['tag'] == tag]
                     if segment.empty:
-                        continue  # Skip empty segments
+                        continue
                     ax.plot(segment['duration (s)'], segment[col], label=tag if i == 0 else "",
                             color=tag_colors[tag], linestyle=line_styles[i])
 
-                    # Adding GPU label only at the end of each line with a bit of offset to prevent overlap
                     last_point = segment['duration (s)'].iloc[-1]
                     last_value = segment[col].iloc[-1]
                     ax.text(last_point, last_value, f'GPU {cuda_device}', fontsize=9, color=tag_colors[tag],
                             ha='left', va='bottom', rotation=45)
 
-                # Plot max memory line for each GPU
                 if max_col in df.columns:
                     max_memory = df[max_col].max()
                     ax.axhline(y=max_memory, color=tag_colors[list(tag_colors.keys())[i % len(tag_colors)]],
@@ -162,8 +139,6 @@ class PerformancePlotter:
 
         ax.set_xlabel('Duration (s)')
         ax.set_ylabel('Memory Used (MiB)')
-
-        # Legend only once per tag and max memory line
         handles, labels = ax.get_legend_handles_labels()
         unique_labels = dict(zip(labels, handles))
         ax.legend(unique_labels.values(), unique_labels.keys(), title='Tag', loc='upper left', bbox_to_anchor=(1, 1))
@@ -173,8 +148,6 @@ class PerformancePlotter:
         plt.close()
 
     def plot(self) -> None:
-        """Plots the performance metrics."""
-
         filepath = f"{self.metric_dir}/node-{self.log_node}.csv"
 
         try:
@@ -182,15 +155,16 @@ class PerformancePlotter:
 
             if df.empty:
                 logging.warning("File %s is empty, skipping.", filepath)
+                return
 
             df['duration (s)'] = pd.to_numeric(df['duration (s)'], errors='coerce')
-
             df.sort_values(by=['duration (s)'], inplace=True)
 
             df = df[df['tag'].notna()]
             node_plot_dir = f"{self.graph_dir}/node-{self.log_node}"
             self.graph(df, node_plot_dir)
             self.plot_cuda_memory(df, node_plot_dir)
+
         except EmptyDataError:
             logging.warning("File %s is empty, skipping.", filepath)
         except ParserError:
