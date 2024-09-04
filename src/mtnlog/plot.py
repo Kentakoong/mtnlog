@@ -163,12 +163,12 @@ class PerformancePlotter:
             df = df[df['tag'].notna()]
             node_plot_dir = f"{self.graph_dir}/node-{self.log_node}"
 
-    # Ensure all relevant columns are cast to numeric
-    for col in df.columns:
-        if col in plot_col:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-    self.graph(df, node_plot_dir)
+            # Ensure all relevant columns are cast to numeric
+            for col in df.columns:
+                if col in plot_col:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
 
+            self.graph(df, node_plot_dir)
             self.plot_cuda_memory(df, node_plot_dir)
 
         except EmptyDataError:
