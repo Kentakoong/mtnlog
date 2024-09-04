@@ -116,8 +116,8 @@ class PerformancePlotter:
             # Add GPU label only at the end of the line
             if 'cuda:' in col:
                 gpu_num = re.search(r'cuda:(\d+)', col).group(1)
-                last_point = df['duration (s)'].iloc[-1]
-                last_value = df[col].iloc[-1]
+                last_point = segment['duration (s)'].iloc[-1]
+                last_value = segment[col].iloc[-1]
                 ax.text(last_point, last_value, f'GPU {gpu_num}', fontsize=9,
                         color=tag_colors[df['tag'].iloc[-1]],
                         ha='left', va='bottom', rotation=45)
