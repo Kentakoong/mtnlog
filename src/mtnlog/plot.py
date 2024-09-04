@@ -174,6 +174,8 @@ class PerformancePlotter:
             if df.empty:
                 logging.warning("File %s is empty, skipping.", filepath)
 
+            df['duration (s)'] = pd.to_numeric(df['duration (s)'], errors='coerce')
+
             df.sort_values(by=['duration (s)'], inplace=True)
 
             df = df[df['tag'].notna()]
