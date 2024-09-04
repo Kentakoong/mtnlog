@@ -84,11 +84,16 @@ class PerformancePlotter:
                 # Drop rows where 'duration (s)' is NaN
                 segment = segment.dropna(subset=['duration (s)'])
 
-                # Ensure 'duration (s)' is numeric and 'col' is handled as appropriate
-                if pd.api.types.is_numeric_dtype(segment[col]):
+                # Convert 'duration (s)' and 'segment[col]' to numeric if possible
+                segment['duration (s)'] = pd.to_numeric(segment['duration (s)'], errors='coerce')
+                segment[col] = pd.to_numeric(segment[col], errors='coerce')
+
+                # Drop any rows where either 'duration (s)' or 'segment[col]' has NaN values
+                segment = segment.dropna(subset=['duration (s)', col])
+
+                # Ensure there is data left to plot after handling NaNs
+                if not segment.empty:
                     ax.plot(segment['duration (s)'], segment[col], label=tag, color=tag_colors[tag])
-                else:
-                    ax.plot(segment['duration (s)'], segment[col].astype(str), label=tag, color=tag_colors[tag])
 
             if 'memory_used (MiB)' in col:
                 gpu_memory_col = col.replace('memory_used (MiB)', 'memory_total (MiB)')
@@ -113,8 +118,8 @@ class PerformancePlotter:
                 gpu_num = re.search(r'cuda:(\d+)', col).group(1)
                 last_point = df['duration (s)'].iloc[-1]
                 last_value = df[col].iloc[-1]
-                ax.text(last_point, last_value, f'GPU {gpu_num}', fontsize=9, 
-                        color=tag_colors[df['tag'].iloc[-1]], 
+                ax.text(last_point, last_value, f'GPU {gpu_num}', fontsize=9,
+                        color=tag_colors[df['tag'].iloc[-1]],
                         ha='left', va='bottom', rotation=45)
 
             plt.tight_layout()
@@ -131,28 +136,28 @@ class PerformancePlotter:
         for i, cuda_device in enumerate(cuda_devices):
             col = f'cuda:{cuda_device} (gpu:{cuda_device})/memory_used (MiB)/mean'
             max_col = f'cuda:{cuda_device} (gpu:{cuda_device})/memory_total (MiB)/mean'
-            
+
             if col in df.columns:
                 for tag in df['tag'].unique():
                     segment = df[df['tag'] == tag]
                     if segment.empty:
                         continue  # Skip empty segments
-                    ax.plot(segment['duration (s)'], segment[col], label=tag if i == 0 else "", 
+                    ax.plot(segment['duration (s)'], segment[col], label=tag if i == 0 else "",
                             color=tag_colors[tag], linestyle=line_styles[i])
 
                     # Adding GPU label only at the end of each line with a bit of offset to prevent overlap
                     last_point = segment['duration (s)'].iloc[-1]
                     last_value = segment[col].iloc[-1]
-                    ax.text(last_point, last_value, f'GPU {cuda_device}', fontsize=9, color=tag_colors[tag], 
+                    ax.text(last_point, last_value, f'GPU {cuda_device}', fontsize=9, color=tag_colors[tag],
                             ha='left', va='bottom', rotation=45)
 
                 # Plot max memory line for each GPU
                 if max_col in df.columns:
                     max_memory = df[max_col].max()
-                    ax.axhline(y=max_memory, color=tag_colors[list(tag_colors.keys())[i % len(tag_colors)]], 
+                    ax.axhline(y=max_memory, color=tag_colors[list(tag_colors.keys())[i % len(tag_colors)]],
                                linestyle=':', label=f'Max GPU {cuda_device}')
-                    ax.text(df['duration (s)'].max(), max_memory, f'Max GPU {cuda_device}: {max_memory:.0f} MiB', 
-                            fontsize=9, color=tag_colors[list(tag_colors.keys())[i % len(tag_colors)]], 
+                    ax.text(df['duration (s)'].max(), max_memory, f'Max GPU {cuda_device}: {max_memory:.0f} MiB',
+                            fontsize=9, color=tag_colors[list(tag_colors.keys())[i % len(tag_colors)]],
                             ha='right', va='bottom')
 
         ax.set_xlabel('Duration (s)')
