@@ -80,11 +80,15 @@ class PerformancePlotter:
 
             _, ax = plt.subplots(figsize=(10, 6))
 
-            for tag in df['tag'].unique():
-                segment = df[df['tag'] == tag]
-                if segment.empty:
-                    continue  # Skip empty segments
-                ax.plot(segment['duration (s)'], segment[col], label=tag, color=tag_colors[tag])
+            for tag, segment in df.groupby('tag'):
+                # Drop rows where 'duration (s)' is NaN
+                segment = segment.dropna(subset=['duration (s)'])
+
+                # Ensure 'duration (s)' is numeric and 'col' is handled as appropriate
+                if pd.api.types.is_numeric_dtype(segment[col]):
+                    ax.plot(segment['duration (s)'], segment[col], label=tag, color=tag_colors[tag])
+                else:
+                    ax.plot(segment['duration (s)'], segment[col].astype(str), label=tag, color=tag_colors[tag])
 
             if 'memory_used (MiB)' in col:
                 gpu_memory_col = col.replace('memory_used (MiB)', 'memory_total (MiB)')
