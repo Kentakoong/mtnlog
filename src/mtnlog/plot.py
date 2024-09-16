@@ -1,3 +1,5 @@
+"""Module to plot performance metrics"""
+
 import logging
 import os
 import re
@@ -37,12 +39,14 @@ tag_colors_map: Dict[str, str] = {
 
 line_styles: List[str] = ['-', '--', '-.', ':']
 
-fallback_colors = plt.get_cmap("Paired").colors
+fallback_colors = plt.get_cmap("Set1").colors
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class PerformancePlotter:
+    """Class to plot performance metrics"""
+
     def __init__(self, base_dir: str, log_node: str):
         self.log_node: str = log_node
         self.metric_dir: str = f"{base_dir}/metric"
@@ -50,6 +54,8 @@ class PerformancePlotter:
         os.makedirs(self.graph_dir, exist_ok=True)
 
     def get_tag_colors(self, df: pd.DataFrame) -> Dict[str, str]:
+        """Get colors for each tag in the DataFrame"""
+
         tags = df['tag'].unique()
         return {
             tag: tag_colors_map.get(tag, fallback_colors[i % len(fallback_colors)])
@@ -57,6 +63,8 @@ class PerformancePlotter:
         }
 
     def graph(self, df: pd.DataFrame, node_plot_dir: str) -> None:
+        """Plot metrics for the given node"""
+
         os.makedirs(node_plot_dir, exist_ok=True)
         tag_colors = self.get_tag_colors(df)
 
@@ -69,17 +77,15 @@ class PerformancePlotter:
             segment = None  # Define segment outside the loop to avoid undefined variable
 
             for tag, segment in df.groupby('tag'):
-                # Ensure 'duration (s)' and 'segment[col]' are numeric
                 segment['duration (s)'] = pd.to_numeric(segment['duration (s)'], errors='coerce')
                 segment[col] = pd.to_numeric(segment[col], errors='coerce')
-
-                # Drop rows with NaN values
                 segment = segment.dropna(subset=['duration (s)', col])
 
                 if not segment.empty:
                     ax.plot(segment['duration (s)'], segment[col], label=tag, color=tag_colors[tag])
 
             if segment is not None and not segment.empty:
+                # Add max memory line for any memory usage metrics
                 if 'memory_used (MiB)' in col:
                     gpu_memory_col = col.replace('memory_used (MiB)', 'memory_total (MiB)')
                     if gpu_memory_col in df.columns:
@@ -87,6 +93,10 @@ class PerformancePlotter:
                         max_y = df[gpu_memory_col].mean()
                         if not pd.isna(max_y):
                             ax.axhline(y=max_y, color='red', linestyle='-', label="Max Memory")
+
+                # Set y-axis limit to 100% for percentage metrics
+                if '%' in col:
+                    ax.set_ylim(0, 100)
 
                 ax.legend(title='Tag')
                 name = re.sub(r"[ /]", "_", col)
@@ -109,6 +119,8 @@ class PerformancePlotter:
                 plt.close()
 
     def plot_cuda_memory(self, df: pd.DataFrame, node_plot_dir: str) -> None:
+        """Plot CUDA memory usage for all GPUs"""
+
         _, ax = plt.subplots(figsize=(14, 8))
         tag_colors = self.get_tag_colors(df)
 
@@ -148,6 +160,8 @@ class PerformancePlotter:
         plt.close()
 
     def plot(self) -> None:
+        """Plot metrics for the given node"""
+
         filepath = f"{self.metric_dir}/node-{self.log_node}.csv"
 
         try:
