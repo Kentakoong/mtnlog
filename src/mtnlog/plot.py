@@ -64,7 +64,6 @@ class PerformancePlotter:
 
     def graph(self, df: pd.DataFrame, node_plot_dir: str) -> None:
         """Plot metrics for the given node"""
-
         os.makedirs(node_plot_dir, exist_ok=True)
         tag_colors = self.get_tag_colors(df)
 
@@ -85,7 +84,7 @@ class PerformancePlotter:
                     ax.plot(segment['duration (s)'], segment[col], label=tag, color=tag_colors[tag])
 
             if segment is not None and not segment.empty:
-                # Add max memory line for any memory usage metrics
+                # Add max memory line for GPU memory usage metrics
                 if 'memory_used (MiB)' in col:
                     gpu_memory_col = col.replace('memory_used (MiB)', 'memory_total (MiB)')
                     if gpu_memory_col in df.columns:
@@ -93,6 +92,15 @@ class PerformancePlotter:
                         max_y = df[gpu_memory_col].mean()
                         if not pd.isna(max_y):
                             ax.axhline(y=max_y, color='red', linestyle='-', label="Max Memory")
+
+                # Add max RAM usage line for memory_used (GiB)
+                if 'memory_used (GiB)' in col:
+                    # Calculate max RAM usage
+                    max_ram = df[col].max()
+                    if not pd.isna(max_ram):
+                        ax.axhline(y=max_ram, color='red', linestyle='-', label="Max RAM")
+                        # Set y-axis limit to start from 0 up to max_ram
+                        ax.set_ylim(0, max_ram)
 
                 # Set y-axis limit to 100% for percentage metrics
                 if '%' in col:
