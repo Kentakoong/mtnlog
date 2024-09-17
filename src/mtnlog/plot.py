@@ -161,9 +161,9 @@ class PerformancePlotter:
                             ax.axhline(y=max_y, color='red', linestyle='-', label="Max Memory")
 
                 # Add max RAM usage line for memory_used (GiB)
-                if 'memory_used (GiB)' in col:
+                if 'memory_used (GiB)' and 'total_ram (GB)' in col:
                     # Calculate max RAM usage
-                    max_ram = df[col].max()
+                    max_ram = df['total_ram (GiB)'].max()
                     if not pd.isna(max_ram):
                         ax.axhline(y=max_ram, color='red', linestyle='-', label="Max RAM")
                         # Set y-axis limit to start from 0 up to max_ram

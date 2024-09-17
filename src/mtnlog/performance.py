@@ -179,6 +179,18 @@ class PerformanceLogger:
         return {f"cpu_core_{i+1} (%)": percent
                 for i, percent in enumerate(cpu_percent)}
 
+    def _get_total_ram(self) -> Dict[str, float]:
+        """ 
+        Collects the total RAM of the device.
+
+        Returns:
+        --------
+        - Dict[str, float]: A dictionary containing the total RAM in GiB.
+        """
+        total_ram = psutil.virtual_memory().total / (1024 ** 3)
+        return {"total_ram (GiB)": total_ram}
+
+
     def _get_network_bandwidth(self) -> Dict[str, float]:
         """
         Collects network bandwidth usage metrics.
@@ -218,19 +230,6 @@ class PerformanceLogger:
         return col
 
     def _collect_metrics(self, collector: ResourceMetricCollector, current_tag: Optional[str]) -> Dict[str, Union[float, str, None]]:
-        """
-        Collects and processes performance metrics including CPU, network, and GPU usage. 
-        Optionally includes a tag to differentiate metrics.
-
-        Parameters:
-        -----------
-        - collector (ResourceMetricCollector): The GPU metrics collector.
-        - current_tag (Optional[str]): An optional tag to include with the metrics.
-
-        Returns:
-        --------
-        - Dict[str, Union[float, str, None]]: A dictionary containing the collected metrics.
-        """
         # Collect the metrics and cast it to the appropriate type
         raw_metrics = collector.collect()
         metrics = cast(Dict[str, Union[float, str, None]], raw_metrics)
@@ -241,6 +240,10 @@ class PerformanceLogger:
 
         network_metrics = self._get_network_bandwidth()
         metrics.update(network_metrics)
+
+        # Collect total RAM
+        total_ram_metrics = self._get_total_ram()
+        metrics.update(total_ram_metrics)
 
         metrics['tag'] = current_tag
 
