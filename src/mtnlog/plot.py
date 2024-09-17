@@ -1,4 +1,26 @@
-"""Module to plot performance metrics"""
+"""
+PerformancePlotter Module
+=========================
+This module provides the `PerformancePlotter` class for plotting performance metrics from CSV files. 
+It visualizes various system metrics such as CPU usage, memory usage, network bandwidth, and GPU utilization.
+
+The plots are saved as images in a specified directory, providing an easy way to analyze the system's performance 
+over time.
+
+Classes:
+--------
+- PerformancePlotter: A class for reading performance metrics from CSV files and plotting them into graphs.
+
+Dependencies:
+-------------
+- `logging`: For logging information, warnings, and errors.
+- `os`: For file and directory management.
+- `re`: For regular expressions to clean up plot labels.
+- `typing`: For type annotations.
+- `matplotlib`: For plotting the performance metrics.
+- `pandas`: For handling the performance data in DataFrame format.
+- `tqdm`: For showing a progress bar during the plotting process.
+"""
 
 import logging
 import os
@@ -45,17 +67,52 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 
 class PerformancePlotter:
-    """Class to plot performance metrics"""
+    """
+    PerformancePlotter
+    ==================
+    A class to plot performance metrics for a specified node from a CSV file. The class can generate 
+    various types of plots including CPU usage, memory usage, network bandwidth, and GPU utilization.
+
+    Attributes:
+    -----------
+    - log_node (str): Identifier for the node whose metrics are to be plotted.
+    - metric_dir (str): Directory where the metrics CSV files are located.
+    - graph_dir (str): Directory where the generated plots will be saved.
+
+    Methods:
+    --------
+    - get_tag_colors(df: pd.DataFrame) -> Dict[str, str]: Returns a color mapping for each tag in the DataFrame.
+    - graph(df: pd.DataFrame, node_plot_dir: str) -> None: Plots the metrics for the given node and saves the plots.
+    - plot_cuda_memory(df: pd.DataFrame, node_plot_dir: str) -> None: Plots CUDA memory usage for all GPUs.
+    - plot() -> None: Reads the metrics from a CSV file and generates plots for the given node.
+    """
 
     def __init__(self, base_dir: str, log_node: str):
+        """
+        Initializes the PerformancePlotter with the base directory and node identifier.
+
+        Parameters:
+        -----------
+        - base_dir (str): The base directory containing the metrics and where the plots will be saved.
+        - log_node (str): Identifier for the node whose metrics are to be plotted.
+        """
         self.log_node: str = log_node
         self.metric_dir: str = f"{base_dir}/metric"
         self.graph_dir: str = f"{base_dir}/graph"
         os.makedirs(self.graph_dir, exist_ok=True)
 
     def get_tag_colors(self, df: pd.DataFrame) -> Dict[str, str]:
-        """Get colors for each tag in the DataFrame"""
+        """
+        Get colors for each tag in the DataFrame to differentiate them in the plots.
 
+        Parameters:
+        -----------
+        - df (pd.DataFrame): The DataFrame containing performance metrics.
+
+        Returns:
+        --------
+        - Dict[str, str]: A dictionary mapping each unique tag in the DataFrame to a color.
+        """
         tags = df['tag'].unique()
         return {
             tag: tag_colors_map.get(tag, fallback_colors[i % len(fallback_colors)])
@@ -63,7 +120,17 @@ class PerformancePlotter:
         }
 
     def graph(self, df: pd.DataFrame, node_plot_dir: str) -> None:
-        """Plot metrics for the given node"""
+        """
+        Plot metrics for the given node and save them as images.
+
+        This method generates line plots for each performance metric in the DataFrame. It differentiates 
+        segments of data based on tags and applies specific styles and colors to each segment.
+
+        Parameters:
+        -----------
+        - df (pd.DataFrame): The DataFrame containing performance metrics.
+        - node_plot_dir (str): Directory where the plots for this node will be saved.
+        """
         os.makedirs(node_plot_dir, exist_ok=True)
         tag_colors = self.get_tag_colors(df)
 
@@ -127,8 +194,17 @@ class PerformancePlotter:
                 plt.close()
 
     def plot_cuda_memory(self, df: pd.DataFrame, node_plot_dir: str) -> None:
-        """Plot CUDA memory usage for all GPUs"""
+        """
+        Plot CUDA memory usage for all GPUs and save the plot.
 
+        This method generates a combined plot showing memory usage for all available CUDA devices. It also includes 
+        a line indicating the maximum memory for each device.
+
+        Parameters:
+        -----------
+        - df (pd.DataFrame): The DataFrame containing CUDA memory usage metrics.
+        - node_plot_dir (str): Directory where the CUDA memory plot will be saved.
+        """
         _, ax = plt.subplots(figsize=(14, 8))
         tag_colors = self.get_tag_colors(df)
 
@@ -168,8 +244,18 @@ class PerformancePlotter:
         plt.close()
 
     def plot(self) -> None:
-        """Plot metrics for the given node"""
+        """
+        Plot metrics for the given node by reading the CSV file and generating the plots.
 
+        This method reads the performance metrics from a CSV file for the specified node, processes the data, 
+        and generates various plots including individual metric plots and CUDA memory usage plots.
+
+        Raises:
+        -------
+        - EmptyDataError: If the CSV file is empty.
+        - ParserError: If the CSV file is improperly formatted.
+        - OSError: If there is an error reading the file.
+        """
         filepath = f"{self.metric_dir}/node-{self.log_node}.csv"
 
         try:
