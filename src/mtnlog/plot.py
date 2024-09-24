@@ -188,8 +188,8 @@ class PerformancePlotter:
         """
         Plot CUDA memory usage for all GPUs and save the plot.
 
-        This method generates a combined plot showing memory usage for all available CUDA devices. It also includes 
-        a line indicating the maximum memory for each device.
+        This method generates a combined plot showing memory usage for all available CUDA devices. 
+        It also includes a line indicating the maximum memory for each device.
 
         Parameters:
         -----------
@@ -217,12 +217,17 @@ class PerformancePlotter:
                             ha='left', va='bottom', rotation=45)
 
                 if max_col in df.columns:
-                    max_memory = df[max_col].max()
-                    ax.axhline(y=max_memory, color=tag_colors[list(tag_colors.keys())[i % len(tag_colors)]],
-                               linestyle=':', label=f'Max GPU {cuda_device}')
-                    ax.text(df['duration (s)'].max(), max_memory, f'Max GPU {cuda_device}: {max_memory:.0f} MiB',
-                            fontsize=9, color=tag_colors[list(tag_colors.keys())[i % len(tag_colors)]],
-                            ha='right', va='bottom')
+                    try:
+                        max_memory = float(df[max_col].max())  # Convert max_memory to float
+                        ax.axhline(y=max_memory, color=tag_colors[list(tag_colors.keys())[i % len(tag_colors)]],
+                                linestyle=':', label=f'Max GPU {cuda_device}')
+                        ax.text(df['duration (s)'].max(), max_memory, 
+                                f'Max GPU {cuda_device}: {max_memory:.0f} MiB',
+                                fontsize=9, color=tag_colors[list(tag_colors.keys())[i % len(tag_colors)]],
+                                ha='right', va='bottom')
+                    except (ValueError, TypeError) as e:
+                        logging.error(f"Error formatting max_memory for GPU {cuda_device}: {e}")
+                        continue
 
         ax.set_xlabel('Duration (s)')
         ax.set_ylabel('Memory Used (MiB)')
