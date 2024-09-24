@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "mtnlog"
-version = "1.2.15"
+version = "1.2.16"
 description = "A simple performance logger for Python"
 authors = [
     "Wongkraiwich Chuenchomphu <wongkraiwich@inedible.dev>",

@@ -78,6 +78,7 @@ class PerformancePlotter:
     - log_node (str): Identifier for the node whose metrics are to be plotted.
     - metric_dir (str): Directory where the metrics CSV files are located.
     - graph_dir (str): Directory where the generated plots will be saved.
+    - total_ram (float): Total RAM available on the node.
 
     Methods:
     --------
@@ -87,7 +88,7 @@ class PerformancePlotter:
     - plot() -> None: Reads the metrics from a CSV file and generates plots for the given node.
     """
 
-    def __init__(self, base_dir: str, log_node: str):
+    def __init__(self, base_dir: str, log_node: str, total_ram: float = 0):
         """
         Initializes the PerformancePlotter with the base directory and node identifier.
 
@@ -99,6 +100,8 @@ class PerformancePlotter:
         self.log_node: str = log_node
         self.metric_dir: str = f"{base_dir}/metric"
         self.graph_dir: str = f"{base_dir}/graph"
+        self.total_ram: float = total_ram
+
         os.makedirs(self.graph_dir, exist_ok=True)
 
     def get_tag_colors(self, df: pd.DataFrame) -> Dict[str, str]:
@@ -151,23 +154,11 @@ class PerformancePlotter:
                     ax.plot(segment['duration (s)'], segment[col], label=tag, color=tag_colors[tag])
 
             if segment is not None and not segment.empty:
-                # Add max memory line for GPU memory usage metrics
-                if 'memory_used (MiB)' in col:
-                    gpu_memory_col = col.replace('memory_used (MiB)', 'memory_total (MiB)')
-                    if gpu_memory_col in df.columns:
-                        df[gpu_memory_col] = pd.to_numeric(df[gpu_memory_col], errors='coerce')
-                        max_y = df[gpu_memory_col].mean()
-                        if not pd.isna(max_y):
-                            ax.axhline(y=max_y, color='red', linestyle='-', label="Max Memory")
-
-                # Add max RAM usage line for memory_used (GiB)
-                if 'memory_used (GiB)' and 'total_ram (GB)' in col:
-                    # Calculate max RAM usage
-                    max_ram = df['total_ram (GiB)'].max()
-                    if not pd.isna(max_ram):
-                        ax.axhline(y=max_ram, color='red', linestyle='-', label="Max RAM")
-                        # Set y-axis limit to start from 0 up to max_ram
-                        ax.set_ylim(0, max_ram)
+                # Add max RAM usage line for memory_used (GiB) using self.total_ram
+                if 'memory_used (GiB)' in col and self.total_ram > 0:
+                    ax.axhline(y=self.total_ram, color='red', linestyle='-', label="Max RAM")
+                    # Set y-axis limit to start from 0 up to self.total_ram
+                    ax.set_ylim(0, self.total_ram)
 
                 # Set y-axis limit to 100% for percentage metrics
                 if '%' in col:
